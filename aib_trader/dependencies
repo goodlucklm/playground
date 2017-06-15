@@ -1,0 +1,5 @@
+python pip
+sudo apt-get install python-pip
+
+python request
+pip install requests
