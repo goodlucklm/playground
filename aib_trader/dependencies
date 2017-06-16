@@ -3,3 +3,6 @@ sudo apt-get install python-pip
 
 python request
 pip install requests
+
+fake useragent
+pip install fake-useragent
