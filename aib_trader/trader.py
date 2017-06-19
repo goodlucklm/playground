@@ -26,14 +26,26 @@ logger.setLevel(logging.DEBUG)
 
 
 def _build_private_api_request_url_string(params):
-    s = PRIVATEAPIURL + '?'
-    for k in params.keys():
-        s += k + '=' + str(params[k]) + '&'
-    return s[:-1]
+    return _build_api_request_url_string(True, params)
 
 
 def _build_tickers_request_url_string(content):
     return TICKERSURL + content
+
+
+def _build_public_api_request_url_string(params):
+    return _build_api_request_url_string(False, params)
+
+
+def _build_api_request_url_string(is_private, params):
+    if is_private:
+        s = PRIVATEAPIURL + '?'
+        params = _add_apikey_and_nonce(params)
+    else:
+        s = PUBLICAPIURL + '?'
+    for k in params.keys():
+        s += k + '=' + str(params[k]) + '&'
+    return s[:-1]
 
 
 def _add_apikey_and_nonce(args):
@@ -48,8 +60,7 @@ def _sign_request(url_str):
 
 
 def _send_signed_request(url_str):
-    ua = UserAgent()
-    headers = {'apisign':_sign_request(url_str), 'User-Agent': ua.firefox}
+    headers = {'apisign': _sign_request(url_str)}
     return requests.get(url_str, headers=headers)
 
 
@@ -114,22 +125,19 @@ def get_prices():
         return None
 
 
-def purchase(spend_currency, target_currency, quantity=0, rate=0.00001):
+def purchase(action, market, quantity=0, rate=0.00001):
     """
-    :param spend_currency: coin to spend
-    :param target_currency: coin to get
+    :param action: buylimit or selllimit
+    :param market: the trading market we are entering
     :param quantity: how much target currency
     :param rate: constand according to api doc
     :return: the order uuid
     """
-    market = spend_currency + '-' + target_currency
-    if quantity == 0:  # means user wants to spend all spend_currency
-        we_have = float(get_balance(spend_currency)['Available'])
-        price = float(last_minute_price[market]['avg'])
-        quantity = we_have / price
-    params = {'market': market, 'quantity': quantity, 'rate': rate}
-    resp = _send_signed_request(_build_private_api_request_url_string(params))
-    if resp.status_code == '200':
+    params = {'a': action, 'market': market, 'quantity': quantity, 'rate': rate}
+    url_str = _build_private_api_request_url_string(params)
+    print url_str
+    resp = _send_signed_request(url_str)
+    if resp.status_code is 200:
         result = json.loads(resp.text)
         logger.debug(market + ',' + str(quantity) + ' order placed with ' + result['result'['uuid']])
         return result['result'['uuid']]
@@ -138,7 +146,17 @@ def purchase(spend_currency, target_currency, quantity=0, rate=0.00001):
         return None
 
 
+def get_order_book(market, type='both', depth=50):
+    params = {'a': 'getorderbook', 'market': market, 'type': type, 'depth': depth}
+    url_str = _build_public_api_request_url_string(params)
+    resp = _send_unsigned_request(url_str)
+    return resp.text
+
+
 if __name__ == '__main__':
     last_minute_price = the_data.last_minute_price
     # print _find_fastest_raising_current_of_last_minute(get_prices())
-    print get_balance('AIB')
+    #print get_balance('AIB')
+    #print get_order_book('aib-btc', 'buy')
+    #print get_order_book('aib-btc', 'sell')
+    print purchase('selllimit', 'aib-btc', '200', '0.00000181')
