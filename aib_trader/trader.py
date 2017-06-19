@@ -1,5 +1,7 @@
 import json
 import pprint
+import random
+
 import requests
 import hmac
 import time
@@ -152,12 +154,34 @@ def get_order_book(market, type='both', depth=50):
 
 
 #################### STRATEGY FUNCTIONS #######################
+def sell_aib_to_myself():
+    while True:
+        # get what we have
+        what_we_have = get_balance('aib')
+        available_aib = float(what_we_have['result']['Available'])
+
+        # whats the orders
+        highest_buying_price = float(get_order_book('aib-btc', 'buy', 3)['result'][0]['Rate'])
+        lowest_selling_price = float(get_order_book('aib-btc', 'sell', 3)['result'][0]['Rate'])
+        mid_price = (lowest_selling_price+highest_buying_price)/2
+        quantity_upper = available_aib
+        quantity_lower = (1e-8*50000)/mid_price
+        if quantity_lower >= available_aib:
+            break  # not enough aib left
+        quantity = random.uniform(quantity_lower, quantity_upper)
+
+        # sell to myself
+        purchase('selllimit', 'aib-btc', quantity, mid_price)
+        purchase('buylimit', 'aib-btc', quantity, mid_price)
+
+        # take a break
+        time.sleep(10)
 
 if __name__ == '__main__':
     last_minute_price = the_data.last_minute_price
     # print _find_fastest_raising_current_of_last_minute(get_prices())
     #print get_balance('AIB')
-    #print get_order_book('aib-btc', 'buy')
-    #print get_order_book('aib-btc', 'sell')
+    print get_order_book('aib-btc', 'buy', 10)
+    print get_order_book('aib-btc', 'sell', 10)
     #print purchase('selllimit', 'aib-btc', '400', '0.00000181')
-    print purchase('buylimit', 'aib-btc', '400', '0.00000181')
+    #print purchase('buylimit', 'aib-btc', '400', '0.00000181')
