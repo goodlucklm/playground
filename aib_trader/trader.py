@@ -100,29 +100,34 @@ def _find_fastest_raising_current_of_last_minute(current_price):
     return largest_raise_currency, largest_raise_percentage
 
 
+def process_response(resp, action_performed):
+    if resp.status_code is 200:
+        if resp.text == '':
+            logger.debug(action_performed+' failed check request %s' % resp.request)
+        else:
+            return json.loads(resp.text)
+    else:
+        logger.error(action_performed+' failed with error code %s, possible api problem.' % resp.status_code)
+        return None
+
+
 def get_balance(currency_name):
     args = {'a': 'getbalance', 'currency': currency_name}
-    args = _add_apikey_and_nonce(args)
     url_str = _build_private_api_request_url_string(args)
-    return _send_signed_request(url_str).text
+    resp = _send_signed_request(url_str)
+    return process_response(resp, 'get balance of '+currency_name)
 
 
 def get_balances():
-    args = _add_apikey_and_nonce({'a': 'getbalances'})
-    url_str = _build_private_api_request_url_string(args)
-    return json.loads(_send_signed_request(url_str))
+    params = {'a': 'getbalances'}
+    url_str = _build_private_api_request_url_string(params)
+    resp = _send_signed_request(url_str)
+    return process_response(resp, 'getbalances')
 
 
 def get_prices():
-    print _build_tickers_request_url_string('prices.json')
     resp = _send_unsigned_request(_build_tickers_request_url_string('prices.json'))
-    if resp.status_code == '200':
-        logger.debug('get prices succeed')
-        return json.loads(resp.text)
-    else:
-        print resp.status_code
-        logger.error('get prices failed with error code %s' % resp.status_code)
-        return None
+    return process_response(resp, 'get prices')
 
 
 def purchase(action, market, quantity=0, rate=0.00001):
@@ -135,23 +140,18 @@ def purchase(action, market, quantity=0, rate=0.00001):
     """
     params = {'a': action, 'market': market, 'quantity': quantity, 'rate': rate}
     url_str = _build_private_api_request_url_string(params)
-    print url_str
     resp = _send_signed_request(url_str)
-    if resp.status_code is 200:
-        result = json.loads(resp.text)
-        logger.debug(market + ',' + str(quantity) + ' order placed with ' + result['result'['uuid']])
-        return result['result'['uuid']]
-    else:
-        logger.error(market + ',' + str(quantity) + ' order failed with %s' % resp.status_code)
-        return None
+    return process_response(resp, action+' in '+market+' at '+rate+' of '+quantity)
 
 
 def get_order_book(market, type='both', depth=50):
     params = {'a': 'getorderbook', 'market': market, 'type': type, 'depth': depth}
     url_str = _build_public_api_request_url_string(params)
     resp = _send_unsigned_request(url_str)
-    return resp.text
+    return process_response(resp, 'get order book')
 
+
+#################### STRATEGY FUNCTIONS #######################
 
 if __name__ == '__main__':
     last_minute_price = the_data.last_minute_price
@@ -159,4 +159,5 @@ if __name__ == '__main__':
     #print get_balance('AIB')
     #print get_order_book('aib-btc', 'buy')
     #print get_order_book('aib-btc', 'sell')
-    print purchase('selllimit', 'aib-btc', '200', '0.00000181')
+    #print purchase('selllimit', 'aib-btc', '400', '0.00000181')
+    print purchase('buylimit', 'aib-btc', '400', '0.00000181')
