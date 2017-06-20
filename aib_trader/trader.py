@@ -65,15 +65,17 @@ def _send_signed_request(url_str):
     retry = 1
     headers = {'apisign': _sign_request(url_str)}
     while True:
+        time.sleep(1)
         resp = requests.get(url_str, headers=headers)
         if resp.status_code == 503:
             logger.error('api error, retry in 30 seconds')
             time.sleep(30)
         else:
-            if resp.text is None:
+            if resp.text is '':
                 if retry > 0:
                     retry -= 1
-                    logger.debug('invoking api failed try again')
+                    logger.debug('invoking api failed, try again')
+                    time.sleep(1)
                     continue
                 else:
                     break
@@ -81,7 +83,23 @@ def _send_signed_request(url_str):
 
 
 def _send_unsigned_request(url_str):
-    return requests.get(url_str)
+    retry = 1
+    while True:
+        time.sleep(1)
+        resp = requests.get(url_str)
+        if resp.status_code == 503:
+            logger.error('api error, retry in 30 seconds')
+            time.sleep(30)
+        else:
+            if resp.text is '':
+                if retry > 0:
+                    retry -= 1
+                    logger.debug('invoking api failed, try again')
+                    time.sleep(1)
+                    continue
+                else:
+                    break
+            return resp
 
 
 def _find_fastest_raising_current_of_last_minute(current_price):
@@ -119,6 +137,7 @@ def process_response(resp, action_performed):
         if resp.text == '':
             logger.debug(action_performed+' failed check request %s' % resp.request)
         else:
+            logger.info(action_performed+' succeed')
             return json.loads(resp.text)
     else:
         logger.error(action_performed+' failed with error code %s, possible api problem.' % resp.status_code)
@@ -142,6 +161,13 @@ def get_balances():
 def get_prices():
     resp = _send_unsigned_request(_build_tickers_request_url_string('prices.json'))
     return process_response(resp, 'get prices')
+
+
+def cancel_order(order_id):
+    params = {'a': 'cancel', 'uuid': order_id}
+    url_str = _build_private_api_request_url_string(params)
+    resp = _send_signed_request(url_str)
+    return process_response(resp, 'cancel order '+str(order_id))
 
 
 def purchase(action, market, quantity=0, rate=0.00001):
@@ -174,7 +200,6 @@ def sell_aib_to_myself():
         my_btc = get_balance('btc')
         available_btc = float(my_btc['result']['Available'])
 
-
         # whats the orders
         highest_buying_price = float(get_order_book('aib-btc', 'buy', 3)['result']['buy'][0]['Rate'])
         lowest_selling_price = float(get_order_book('aib-btc', 'sell', 3)['result']['sell'][0]['Rate'])
@@ -186,11 +211,15 @@ def sell_aib_to_myself():
         quantity = random.uniform(quantity_lower, quantity_upper)
 
         # sell to myself
-        purchase('selllimit', 'aib-btc', quantity, mid_price)
+        order_id = purchase('selllimit', 'aib-btc', quantity, mid_price)['result']['uuid']
         purchase('buylimit', 'aib-btc', quantity, mid_price)
 
         # take a break
-        time.sleep(random.randint(5, 15))
+        time.sleep(random.randint(10, 15))
+
+        # cancel leftover orders
+        cancel_order(order_id)
+
 
 if __name__ == '__main__':
     last_minute_price = the_data.last_minute_price
