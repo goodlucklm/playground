@@ -62,14 +62,26 @@ def _sign_request(url_str):
 
 
 def _send_signed_request(url_str):
+    retry = 1
     headers = {'apisign': _sign_request(url_str)}
-    return requests.get(url_str, headers=headers)
+    while True:
+        resp = requests.get(url_str, headers=headers)
+        if resp.status_code == 503:
+            logger.error('api error, retry in 30 seconds')
+            time.sleep(30)
+        else:
+            if resp.text is None:
+                if retry > 0:
+                    retry -= 1
+                    logger.debug('invoking api failed try again')
+                    continue
+                else:
+                    break
+            return resp
 
 
 def _send_unsigned_request(url_str):
-    ua = UserAgent()
-    headers = {'User-Agent': ua.firefox}
-    return requests.get(url_str, headers=headers)
+    return requests.get(url_str)
 
 
 def _find_fastest_raising_current_of_last_minute(current_price):
@@ -143,7 +155,7 @@ def purchase(action, market, quantity=0, rate=0.00001):
     params = {'a': action, 'market': market, 'quantity': quantity, 'rate': rate}
     url_str = _build_private_api_request_url_string(params)
     resp = _send_signed_request(url_str)
-    return process_response(resp, action+' in '+market+' at '+rate+' of '+quantity)
+    return process_response(resp, action+' in '+market+' at '+str(rate)+' of '+str(quantity))
 
 
 def get_order_book(market, type='both', depth=50):
@@ -164,8 +176,8 @@ def sell_aib_to_myself():
 
 
         # whats the orders
-        highest_buying_price = float(get_order_book('aib-btc', 'buy', 3)['result'][0]['Rate'])
-        lowest_selling_price = float(get_order_book('aib-btc', 'sell', 3)['result'][0]['Rate'])
+        highest_buying_price = float(get_order_book('aib-btc', 'buy', 3)['result']['buy'][0]['Rate'])
+        lowest_selling_price = float(get_order_book('aib-btc', 'sell', 3)['result']['sell'][0]['Rate'])
         mid_price = (lowest_selling_price+highest_buying_price)/2
         quantity_upper = min(available_aib, available_btc/mid_price)
         quantity_lower = (1e-8*50000)/mid_price
@@ -178,7 +190,7 @@ def sell_aib_to_myself():
         purchase('buylimit', 'aib-btc', quantity, mid_price)
 
         # take a break
-        time.sleep(random.sample(5, 15))
+        time.sleep(random.randint(5, 15))
 
 if __name__ == '__main__':
     last_minute_price = the_data.last_minute_price
