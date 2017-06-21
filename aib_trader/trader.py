@@ -193,6 +193,7 @@ def get_order_book(market, type='both', depth=50):
 
 #################### STRATEGY FUNCTIONS #######################
 def sell_aib_to_myself():
+    mid_price = 0
     while True:
         # get what we have
         my_aib = get_balance('aib')
@@ -200,19 +201,40 @@ def sell_aib_to_myself():
         my_btc = get_balance('btc')
         available_btc = float(my_btc['result']['Available'])
 
+        # determine buy or sell
+        threshold = 0.5
+        if mid_price == 0:
+            threshold = 0.5
+        else:
+            aib_value = available_aib*mid_price
+            threshold = aib_value/(aib_value+available_btc)
+        chance = random.uniform(0.0, 1.0)
+        if chance > threshold:
+            action = 'selllimit'
+            counter_action = 'buylimit'
+        else:
+            action = 'buylimit'
+            counter_action = 'selllimit'
+
         # whats the orders
         highest_buying_price = float(get_order_book('aib-btc', 'buy', 3)['result']['buy'][0]['Rate'])
         lowest_selling_price = float(get_order_book('aib-btc', 'sell', 3)['result']['sell'][0]['Rate'])
         mid_price = (lowest_selling_price+highest_buying_price)/2
-        quantity_upper = min(available_aib, available_btc/mid_price)
+        if action == 'selllimit':
+            our_price = lowest_selling_price-1e-8
+        elif action == 'buylimit':
+            our_price = highest_buying_price+1e-8
+        else:
+            our_price = mid_price
         quantity_lower = (1e-8*50000)/mid_price
+        quantity_upper = min(available_aib, available_btc/mid_price, quantity_lower*2)
         if quantity_lower >= available_aib:
             break  # not enough aib left
         quantity = random.uniform(quantity_lower, quantity_upper)
 
         # sell to myself
-        order_id = purchase('selllimit', 'aib-btc', quantity, mid_price)['result']['uuid']
-        purchase('buylimit', 'aib-btc', quantity, mid_price)
+        order_id = purchase(action, 'aib-btc', quantity, our_price)['result']['uuid']
+        purchase(counter_action, 'aib-btc', quantity, our_price)
 
         # take a break
         time.sleep(random.randint(10, 15))
