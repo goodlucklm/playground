@@ -251,4 +251,4 @@ if __name__ == '__main__':
     #print get_order_book('aib-btc', 'sell', 10)
     #print purchase('selllimit', 'aib-btc', '400', '0.00000181')
     #print purchase('buylimit', 'aib-btc', '400', '0.00000181')
-    sell_aib_to_myself()
+    #sell_aib_to_myself()
