@@ -132,15 +132,19 @@ def _find_fastest_raising_current_of_last_minute(current_price):
     return largest_raise_currency, largest_raise_percentage
 
 
-def process_response(resp, action_performed):
+def process_response(resp):
     if resp.status_code is 200:
         if resp.text == '':
-            logger.debug(action_performed+' failed check request %s' % resp.request)
+            logger.debug(resp.url+' failed check your request %s' % resp.request)
         else:
-            logger.info(action_performed+' succeed')
-            return json.loads(resp.text)
+            result = json.loads(resp.text)
+            if result['success']:
+                logger.info(resp.url+' succeed ')
+                return json.loads(resp.text)
+            else:
+                logger.info(resp.url+' failed '+result['message'])
     else:
-        logger.error(action_performed+' failed with error code %s, possible api problem.' % resp.status_code)
+        logger.error(resp.url+' failed with error code %s, possible api problem.' % resp.status_code)
         return None
 
 
@@ -148,26 +152,33 @@ def get_balance(currency_name):
     args = {'a': 'getbalance', 'currency': currency_name}
     url_str = _build_private_api_request_url_string(args)
     resp = _send_signed_request(url_str)
-    return process_response(resp, 'get balance of '+currency_name)
+    return process_response(resp)
 
 
 def get_balances():
     params = {'a': 'getbalances'}
     url_str = _build_private_api_request_url_string(params)
     resp = _send_signed_request(url_str)
-    return process_response(resp, 'getbalances')
+    return process_response(resp)
 
 
 def get_prices():
     resp = _send_unsigned_request(_build_tickers_request_url_string('prices.json'))
-    return process_response(resp, 'get prices')
+    return process_response(resp)
 
 
 def cancel_order(order_id):
     params = {'a': 'cancel', 'uuid': order_id}
     url_str = _build_private_api_request_url_string(params)
     resp = _send_signed_request(url_str)
-    return process_response(resp, 'cancel order '+str(order_id))
+    return process_response(resp)
+
+
+def get_open_orders():
+    params = {'a':'getopenorders'}
+    url_str = _build_private_api_request_url_string(params)
+    resp = _send_signed_request(url_str)
+    return process_response(resp)
 
 
 def purchase(action, market, quantity=0, rate=0.00001):
@@ -181,20 +192,20 @@ def purchase(action, market, quantity=0, rate=0.00001):
     params = {'a': action, 'market': market, 'quantity': quantity, 'rate': rate}
     url_str = _build_private_api_request_url_string(params)
     resp = _send_signed_request(url_str)
-    return process_response(resp, action+' in '+market+' at '+str(rate)+' of '+str(quantity))
+    return process_response(resp)
 
 
 def get_order_book(market, type='both', depth=50):
     params = {'a': 'getorderbook', 'market': market, 'type': type, 'depth': depth}
     url_str = _build_public_api_request_url_string(params)
     resp = _send_unsigned_request(url_str)
-    return process_response(resp, 'get order book')
+    return process_response(resp)
 
 
 #################### STRATEGY FUNCTIONS #######################
 def sell_aib_to_myself():
     mid_price = 0
-    while True:
+    while mid_price == 0:
         # get what we have
         my_aib = get_balance('aib')
         available_aib = float(my_aib['result']['Available'])
@@ -209,7 +220,7 @@ def sell_aib_to_myself():
             aib_value = available_aib*mid_price
             threshold = aib_value/(aib_value+available_btc)
         chance = random.uniform(0.0, 1.0)
-        if chance > threshold:
+        if chance < threshold:
             action = 'selllimit'
             counter_action = 'buylimit'
         else:
@@ -221,9 +232,9 @@ def sell_aib_to_myself():
         lowest_selling_price = float(get_order_book('aib-btc', 'sell', 3)['result']['sell'][0]['Rate'])
         mid_price = (lowest_selling_price+highest_buying_price)/2
         if action == 'selllimit':
-            our_price = lowest_selling_price-1e-8
+            our_price = random.uniform(lowest_selling_price-6e-8, lowest_selling_price-1e-8)
         elif action == 'buylimit':
-            our_price = highest_buying_price+1e-8
+            our_price = random.uniform(highest_buying_price+6e-8, highest_buying_price+1e-8)
         else:
             our_price = mid_price
         quantity_lower = (1e-8*50000)/mid_price
@@ -233,6 +244,7 @@ def sell_aib_to_myself():
         quantity = random.uniform(quantity_lower, quantity_upper)
 
         # sell to myself
+        print chance, threshold, action, our_price, quantity
         order_id = purchase(action, 'aib-btc', quantity, our_price)['result']['uuid']
         purchase(counter_action, 'aib-btc', quantity, our_price)
 
@@ -246,6 +258,7 @@ def sell_aib_to_myself():
 if __name__ == '__main__':
     last_minute_price = the_data.last_minute_price
     # print _find_fastest_raising_current_of_last_minute(get_prices())
+    print get_open_orders()
     #print get_balance('AIB')
     #print get_order_book('aib-btc', 'buy', 10)
     #print get_order_book('aib-btc', 'sell', 10)
